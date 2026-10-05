@@ -1,0 +1,222 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Role {
+  id          Int          @id @default(autoincrement())
+  name        String       @unique
+  users       User[]
+  permissions Permission[]
+}
+
+model Permission {
+  id        Int     @id @default(autoincrement())
+  roleId    Int
+  module    String
+  canView   Boolean @default(false)
+  canCreate Boolean @default(false)
+  canEdit   Boolean @default(false)
+  canDelete Boolean @default(false)
+  role      Role    @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  @@unique([roleId, module])
+}
+
+model User {
+  id             Int             @id @default(autoincrement())
+  name           String
+  username       String          @unique
+  passwordHash   String
+  roleId         Int
+  isActive       Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  role           Role            @relation(fields: [roleId], references: [id])
+  movements      StockMovement[]
+  auditLogs      AuditLog[]
+  productionLogs ProductionLog[]
+}
+
+model Warehouse {
+  id          Int            @id @default(autoincrement())
+  name        String         @unique
+  type        String         // RAW, FINISHED, PACKAGING, SECONDS
+  location    String?
+  manager     String?
+  capacity    Decimal?       @default(10000)
+  movements   StockMovement[]
+  balances    StockBalance[]
+}
+
+model Supplier {
+  id      Int      @id @default(autoincrement())
+  name    String   @unique
+  phone   String?
+  address String?
+  batches MaterialBatch[]
+}
+
+model Product {
+  id             Int             @id @default(autoincrement())
+  code           String          @unique
+  name           String
+  category       String
+  type           String?
+  size           String
+  color          String
+  design         String?
+  composition    String?
+  pairWeightG    Decimal?
+  dozenWeightKg  Decimal?
+  stdCost        Decimal?
+  sellingPrice   Decimal?
+  pairsPerCarton Int             @default(144)
+  isActive       Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  movements      StockMovement[]
+  productionLogs ProductionLog[]
+  @@index([category, size])
+  @@index([name])
+}
+
+model ProductSize {
+  id   Int    @id @default(autoincrement())
+  name String @unique
+}
+
+model ProductColor {
+  id   Int    @id @default(autoincrement())
+  name String @unique
+}
+
+model Material {
+  id             Int             @id @default(autoincrement())
+  code           String          @unique
+  name           String
+  yarnType       String?
+  yarnCount      String?
+  composition    String?
+  color          String?
+  unit           String          @default("kg")
+  reorderLevel   Decimal         @default(0)
+  isActive       Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  batches        MaterialBatch[]
+  movements      StockMovement[]
+  productionLogs ProductionLog[]
+  @@index([name])
+}
+
+model MaterialBatch {
+  id           Int       @id @default(autoincrement())
+  materialId   Int
+  supplierId   Int?
+  lotNo        String
+  purchaseDate DateTime?
+  rate         Decimal?
+  remarks      String?
+  material     Material  @relation(fields: [materialId], references: [id])
+  supplier     Supplier? @relation(fields: [supplierId], references: [id])
+  movements    StockMovement[]
+  @@unique([materialId, lotNo])
+}
+
+model Machine {
+  id             Int             @id @default(autoincrement())
+  machineNo      Int             @unique // Machine 1 to 5
+  name           String          // e.g. "Knitting Machine #1"
+  model          String          @default("Lonati Donna 400")
+  cylinderSize   String          @default("3.75 inch")
+  needleCount    Int             @default(144) // 144N, 168N, 200N
+  rpm            Int             @default(280)
+  status         String          @default("RUNNING") // RUNNING, IDLE, MAINTENANCE, STOPPED
+  operator       String?
+  targetPerHour  Decimal         @default(3.5)
+  notes          String?
+  createdAt      DateTime        @default(now())
+  productionLogs ProductionLog[]
+}
+
+model ProductionLog {
+  id             Int       @id @default(autoincrement())
+  machineId      Int
+  productId      Int
+  materialId     Int?      // Raw yarn consumed
+  shiftType      String    @default("DAY_12H") // DAY_12H, NIGHT_12H, DAY_10H, NIGHT_10H
+  shiftHours     Decimal   @default(12.0)      // 10.0 or 12.0
+  operator       String    // Operator name
+  date           DateTime  @default(now())
+  dozenA         Decimal   @default(0)         // Category A Fresh/Export in Dozen
+  dozenB         Decimal   @default(0)         // Category B Seconds/Defects in Dozen
+  totalDozen     Decimal   @default(0)         // dozenA + dozenB
+  totalPairs     Decimal   @default(0)         // totalDozen * 12
+  yarnUsedKg     Decimal   @default(0)         // Yarn consumed in kg
+  efficiency     Decimal   @default(0)         // % of standard output target
+  defectRate     Decimal   @default(0)         // (dozenB / totalDozen) * 100%
+  status         String    @default("COMPLETED")
+  notes          String?
+  createdById    Int
+  createdAt      DateTime  @default(now())
+
+  machine        Machine   @relation(fields: [machineId], references: [id])
+  product        Product   @relation(fields: [productId], references: [id])
+  material       Material? @relation(fields: [materialId], references: [id])
+  createdBy      User      @relation(fields: [createdById], references: [id])
+
+  @@index([machineId, date])
+  @@index([productId, date])
+}
+
+// Every stock change is a row here. Never edit stock directly.
+model StockMovement {
+  id             Int            @id @default(autoincrement())
+  type           String         // MovementType: OPENING, STOCK_IN, STOCK_OUT, PRODUCTION, TRANSFER_IN, etc.
+  direction      Int            // +1 in, -1 out
+  qty            Decimal        // always positive
+  materialId     Int?
+  productId      Int?
+  batchId        Int?
+  warehouseId    Int
+  referenceType  String?        // e.g. "PRODUCTION_LOG", "PO", "SO"
+  referenceId    Int?
+  note           String?
+  createdById    Int
+  createdAt      DateTime       @default(now())
+  material       Material?      @relation(fields: [materialId], references: [id])
+  product        Product?       @relation(fields: [productId], references: [id])
+  batch          MaterialBatch? @relation(fields: [batchId], references: [id])
+  warehouse      Warehouse      @relation(fields: [warehouseId], references: [id])
+  createdBy      User           @relation(fields: [createdById], references: [id])
+  @@index([materialId, warehouseId, createdAt])
+  @@index([productId, warehouseId, createdAt])
+  @@index([referenceType, referenceId])
+}
+
+// Cached running balance, updated in the same transaction as the movement.
+model StockBalance {
+  id          Int       @id @default(autoincrement())
+  itemKey     String    // "M:<id>" yarn/material, "P:<id>" product (pairs)
+  materialId  Int?
+  productId   Int?
+  warehouseId Int
+  qty         Decimal   @default(0)
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+  @@unique([itemKey, warehouseId])
+}
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int?
+  action    String
+  entity    String
+  entityId  Int?
+  oldValue  String?  // JSON stored as string for SQLite compatibility
+  newValue  String?  // JSON stored as string for SQLite compatibility
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id])
+  @@index([entity, entityId])
+  @@index([createdAt])
+}

@@ -1,0 +1,16 @@
+{
+  "name": "threadcraft-erp",
+  "version": "1.0.0",
+  "description": "ThreadCraft ERP - Enterprise Apparel Manufacturing & Operations Platform",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix socks-erp run dev",
+    "build": "npm --prefix socks-erp run build",
+    "start": "npm --prefix socks-erp run start",
+    "db:migrate": "npm --prefix socks-erp run db:migrate",
+    "db:deploy": "npm --prefix socks-erp run db:deploy",
+    "db:push": "npm --prefix socks-erp run db:push",
+    "db:seed": "npm --prefix socks-erp run db:seed",
+    "ai:test": "python services/test_ai_assistant.py"
+  }
+}

@@ -1,0 +1,39 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: threadcraft_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-threadcraft}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-threadcraft_secure_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-threadcraft_erp}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-threadcraft} -d ${POSTGRES_DB:-threadcraft_erp}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: ./socks-erp
+      dockerfile: Dockerfile
+    container_name: threadcraft_erp_app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-threadcraft}:${POSTGRES_PASSWORD:-threadcraft_secure_pass}@db:5432/${POSTGRES_DB:-threadcraft_erp}?schema=public
+      AUTH_SECRET: ${AUTH_SECRET:-threadcraft_production_jwt_signing_key_default_replace}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-AdminSecurePassword123!}
+      ALLOW_NEGATIVE_STOCK: ${ALLOW_NEGATIVE_STOCK:-false}
+      COOKIE_INSECURE: ${COOKIE_INSECURE:-1}
+      NODE_ENV: production
+    ports:
+      - "${PORT:-3000}:3000"
+
+volumes:
+  pgdata:
+    name: threadcraft_pgdata
