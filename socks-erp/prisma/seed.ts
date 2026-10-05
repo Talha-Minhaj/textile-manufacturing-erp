@@ -29,7 +29,7 @@ async function main() {
   const admin = await db.role.findUniqueOrThrow({ where: { name: "Admin" } });
   const adminUser = await db.user.upsert({
     where: { username: "admin" },
-    update: {},
+    update: { passwordHash: pw },
     create: { name: "Administrator", username: "admin", passwordHash: pw, roleId: admin.id },
   });
 
